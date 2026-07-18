@@ -31,4 +31,21 @@ if grep -Eq -- '--(telegram-)?token([=[:space:]])|bash[[:space:]]+-s[[:space:]]+
   fail "Telegram token appears to be accepted as a command-line argument"
 fi
 
+[[ -f README.md ]] || fail "README.md is missing"
+[[ -f LICENSE ]] || fail "LICENSE is missing"
+[[ -f .github/workflows/ci.yml ]] || fail "GitHub Actions CI is missing"
+grep -Fq 'v1.0.0/install.sh' README.md || fail "README does not use the stable tagged installer"
+grep -Fq 'sudo bash /tmp/hermes-vps-install.sh' README.md || fail "README one-line sudo command is missing"
+grep -Fq '@BotFather' README.md || fail "BotFather instructions are missing"
+grep -Fq 'gpt-5.6-terra' README.md || fail "README model is missing"
+grep -Fq 'medium' README.md || fail "README reasoning level is missing"
+grep -Fqi 'auto-effort' README.md || fail "README auto-effort setting is missing"
+grep -Fq 'hermes gateway status --system --deep' README.md || fail "README diagnostics are missing"
+grep -Eqi 'root.*(risk|риск|доступ)' README.md || fail "README root-risk warning is missing"
+if grep -Eq '[0-9]{6,12}:[A-Za-z0-9_-]{30,}' README.md; then
+  fail "README contains a token-like secret"
+fi
+grep -Fq 'shellcheck install.sh' .github/workflows/ci.yml || fail "CI does not run shellcheck"
+grep -Fq 'python3 -m unittest discover -s tests -v' .github/workflows/ci.yml || fail "CI does not run Python tests"
+
 printf 'static installer checks: PASS\n'

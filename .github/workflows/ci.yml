@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Bash syntax
+        run: bash -n install.sh
+
+      - name: Shellcheck
+        run: shellcheck install.sh tests/*.sh
+
+      - name: Python compile check
+        run: python3 -m compileall -q lib tests
+
+      - name: Python unit tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Static acceptance checks
+        run: bash tests/test_static.sh

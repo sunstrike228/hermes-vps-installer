@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-INSTALLER_VERSION="v1.1.0"
+INSTALLER_VERSION="v1.1.1"
 HERMES_UPSTREAM_COMMIT="e4ea0a0ed7fc24761b2b425146893561a73216e1"
 OFFICIAL_INSTALLER_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_UPSTREAM_COMMIT}/scripts/install.sh"
 ASSET_BASE_URL="${HERMES_INSTALLER_ASSET_BASE:-https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/${INSTALLER_VERSION}}"
@@ -131,7 +131,7 @@ install_hermes() {
     download_file "$OFFICIAL_INSTALLER_URL" "$official_installer"
   fi
   chmod 700 "$official_installer"
-  CALL_LOG="${CALL_LOG:-}" bash "$official_installer" \
+  CALL_LOG="${CALL_LOG:-}" npm_config_yes=true bash "$official_installer" \
     --skip-setup \
     --non-interactive \
     --commit "$HERMES_UPSTREAM_COMMIT" \
@@ -262,6 +262,7 @@ authorize_codex() {
 configure_model() {
   print_stage "Hermes model configuration"
   hermes config set model.provider openai-codex
+  hermes config set model.base_url https://chatgpt.com/backend-api/codex
   hermes config set agent.reasoning_effort medium
   hermes config set agent.reasoning_effort_auto.enabled true
 }

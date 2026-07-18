@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-INSTALLER_VERSION="v1.0.0"
+INSTALLER_VERSION="v1.1.0"
 HERMES_UPSTREAM_COMMIT="e4ea0a0ed7fc24761b2b425146893561a73216e1"
 OFFICIAL_INSTALLER_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_UPSTREAM_COMMIT}/scripts/install.sh"
-ASSET_BASE_URL="https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/${INSTALLER_VERSION}"
+ASSET_BASE_URL="${HERMES_INSTALLER_ASSET_BASE:-https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/${INSTALLER_VERSION}}"
 HERMES_HOME="${HERMES_HOME:-/root/.hermes}"
 export HERMES_HOME
 HERMES_ENV_PATH="${HERMES_HOME}/.env"
@@ -16,6 +16,8 @@ TELEGRAM_TOKEN=""
 TELEGRAM_OWNER_ID=""
 TELEGRAM_CHAT_ID=""
 BOT_USERNAME=""
+PREPARE_JSON=""
+SELECTED_MODEL="gpt-5.6-terra"
 HELPER_PATH=""
 RESTORE_EXISTING_GATEWAY="0"
 
@@ -149,16 +151,43 @@ prepare_helper() {
   chmod 600 "$HELPER_PATH"
 }
 
+validate_token_online() {
+  local helper="$1"
+  local prepare_json
+  if ! prepare_json="$(TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN" python3 "$helper" prepare)"; then
+    return 1
+  fi
+  PREPARE_JSON="$prepare_json"
+  BOT_USERNAME="$(json_field username <<<"$PREPARE_JSON")"
+  [[ "$BOT_USERNAME" =~ ^[A-Za-z0-9_]{5,32}$ ]] || fatal "Telegram returned an invalid bot username"
+}
+
 prompt_telegram_token() {
+  local helper="$1"
   print_stage "Telegram Bot Token"
   if [[ "$TEST_MODE" == "1" ]]; then
     TELEGRAM_TOKEN="${HERMES_TEST_TELEGRAM_TOKEN:-}"
-  else
+    [[ -n "$TELEGRAM_TOKEN" ]] || fatal "Telegram token was not provided"
+    validate_token_online "$helper" || fatal "Telegram rejected the provided token"
+    return
+  fi
+  local attempt
+  for attempt in 1 2 3 4 5; do
     printf 'Paste the token from @BotFather (input is hidden): ' >/dev/tty
     IFS= read -r -s TELEGRAM_TOKEN </dev/tty
     printf '\n' >/dev/tty
-  fi
-  [[ -n "$TELEGRAM_TOKEN" ]] || fatal "Telegram token was not provided"
+    if [[ -z "$TELEGRAM_TOKEN" ]]; then
+      warn "Empty token. Attempt ${attempt}/5."
+      continue
+    fi
+    if validate_token_online "$helper" 2>/dev/tty; then
+      info "Token accepted - bot @${BOT_USERNAME}."
+      return
+    fi
+    TELEGRAM_TOKEN=""
+    warn "Telegram rejected this token. Check O vs 0, l vs 1 and letter case, then try again. Attempt ${attempt}/5."
+  done
+  fatal "Telegram token was not accepted after 5 attempts"
 }
 
 pause_existing_gateway() {
@@ -180,11 +209,8 @@ json_field() {
 
 configure_telegram() {
   local helper="$1"
-  print_stage "Validate and claim Telegram bot"
-  local prepare_json
-  prepare_json="$(TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN" python3 "$helper" prepare)"
-  BOT_USERNAME="$(json_field username <<<"$prepare_json")"
-  [[ "$BOT_USERNAME" =~ ^[A-Za-z0-9_]{5,32}$ ]] || fatal "Telegram returned an invalid bot username"
+  print_stage "Claim Telegram bot ownership"
+  [[ -n "$BOT_USERNAME" ]] || fatal "Telegram bot was not validated"
 
   local claim_payload
   claim_payload="h_$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
@@ -236,25 +262,38 @@ authorize_codex() {
 configure_model() {
   print_stage "Hermes model configuration"
   hermes config set model.provider openai-codex
-  hermes config set model.default gpt-5.6-terra
   hermes config set agent.reasoning_effort medium
   hermes config set agent.reasoning_effort_auto.enabled true
 }
 
-verify_codex() {
-  print_stage "Codex Terra smoke test"
-  local output="${TMP_DIR}/codex-smoke.log"
-  if ! hermes chat \
+codex_smoke() {
+  local model="$1"
+  local output="${TMP_DIR}/codex-smoke-${model}.log"
+  hermes chat \
     -q 'Reply with exactly: OK' \
-    -m gpt-5.6-terra \
+    -m "$model" \
     --provider openai-codex \
     -t safe \
-    -Q >"$output" 2>&1; then
-    warn "Codex Terra smoke test failed. Output follows:"
-    tail -n 30 "$output" >&2 || true
-    fatal "gpt-5.6-terra is unavailable or Codex authentication failed; no fallback model was selected"
+    -Q >"$output" 2>&1
+}
+
+verify_codex() {
+  print_stage "Codex smoke test"
+  if codex_smoke gpt-5.6-terra; then
+    SELECTED_MODEL="gpt-5.6-terra"
+  else
+    warn "gpt-5.6-terra did not respond on this account; trying fallback gpt-5.6-sol..."
+    tail -n 10 "${TMP_DIR}/codex-smoke-gpt-5.6-terra.log" >&2 || true
+    if codex_smoke gpt-5.6-sol; then
+      SELECTED_MODEL="gpt-5.6-sol"
+    else
+      warn "Fallback smoke test failed. Output follows:"
+      tail -n 30 "${TMP_DIR}/codex-smoke-gpt-5.6-sol.log" >&2 || true
+      fatal "Neither gpt-5.6-terra nor gpt-5.6-sol is available; Codex authentication or model access failed"
+    fi
   fi
-  info "Codex Terra responded successfully."
+  hermes config set model.default "$SELECTED_MODEL"
+  info "Codex responded successfully via ${SELECTED_MODEL}."
 }
 
 install_gateway() {
@@ -273,7 +312,13 @@ notify_owner() {
   local helper="$1"
   print_stage "Telegram completion notice"
   local notice
-  notice=$'Hermes установлен и запущен.\n\nModel: gpt-5.6-terra\nReasoning: medium + auto-effort\nGateway: active\n\nПопробуйте команды: /status, /new, /goal'
+  notice="Hermes встановлено і запущено.
+
+Модель: ${SELECTED_MODEL}
+Reasoning: medium + авто
+Міст: активний
+
+Спробуй команди: /status, /new, /goal"
   TELEGRAM_BOT_TOKEN="$TELEGRAM_TOKEN" \
   TELEGRAM_HOME_CHANNEL="$TELEGRAM_CHAT_ID" \
   TELEGRAM_NOTIFY_TEXT="$notice" \
@@ -287,7 +332,7 @@ Ubuntu: required
 Run as: root
 Hermes commit: ${HERMES_UPSTREAM_COMMIT}
 Provider: openai-codex
-Model: gpt-5.6-terra
+Model: gpt-5.6-terra (fallback: gpt-5.6-sol)
 Reasoning: medium
 Auto-effort: enabled
 Gateway: systemd system service, enabled and started
@@ -306,7 +351,7 @@ main() {
   prepare_temp_files
   install_hermes
   prepare_helper
-  prompt_telegram_token
+  prompt_telegram_token "$HELPER_PATH"
   pause_existing_gateway
   configure_telegram "$HELPER_PATH"
   authorize_codex
@@ -317,7 +362,7 @@ main() {
 
   printf '\n\033[1;32mHermes installation completed successfully.\033[0m\n'
   printf 'Bot: https://t.me/%s\n' "$BOT_USERNAME"
-  printf 'Model: gpt-5.6-terra\n'
+  printf 'Model: %s\n' "$SELECTED_MODEL"
   printf 'Reasoning: medium + auto-effort\n'
   printf 'Gateway: active and enabled on boot\n'
   printf 'Diagnostics: hermes gateway status --system --deep\n'

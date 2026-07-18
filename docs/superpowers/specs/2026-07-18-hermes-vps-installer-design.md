@@ -9,8 +9,10 @@
 
 При первом запуске от пользователя требуются только:
 
-1. авторизация OpenAI Codex через существующую ChatGPT-подписку по device-code flow;
-2. Telegram Bot Token от `@BotFather`.
+1. Telegram Bot Token от `@BotFather` — вставляется в скрытый terminal prompt;
+2. авторизация OpenAI Codex через существующую ChatGPT-подписку по device-code flow.
+
+После ввода Telegram token установщик не задаёт конфигурационных вопросов. Последний интерактивный этап — показ прямой ссылки `https://auth.openai.com/codex/device` и одноразового Codex-кода.
 
 Для безопасной автоматической привязки владельца пользователь дополнительно отправляет показанную установщиком одноразовую фразу своему Telegram-боту. Telegram user ID вручную не вводится.
 
@@ -48,14 +50,27 @@ curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/m
 2. Установить минимальные системные зависимости через `apt-get` при необходимости.
 3. Скачать официальный Hermes installer во временный файл и запустить его с `--skip-setup --non-interactive`. Версия Hermes фиксируется на проверенном upstream commit, указанном константой установщика.
 4. Убедиться, что команда `hermes` доступна и `hermes doctor` не сообщает блокирующих проблем.
-5. Если валидная Codex OAuth-сессия ещё не существует, запустить напрямую:
+5. Запросить Telegram Bot Token скрытым вводом из `/dev/tty`.
+6. Проверить формат токена и вызвать Telegram Bot API `getMe`. Не печатать токен ни в stdout, ни в логи.
+7. Проверить `getWebhookInfo`. Если у бота уже настроен webhook, остановиться с объяснением вместо его удаления.
+8. Сгенерировать криптографически случайную claim-фразу и показать безопасную deep-link ссылку на созданного бота. Пользователь нажимает Start; дополнительный terminal input не требуется.
+9. До запуска gateway опрашивать Telegram `getUpdates`, принимать только точное совпадение с claim-фразой и извлекать `from.id`/`chat.id`. Устаревшие сообщения не считаются подтверждением.
+10. Сохранить через безопасную атомарную запись с правами `0600`:
+
+   ```text
+   TELEGRAM_BOT_TOKEN=[REDACTED]
+   TELEGRAM_ALLOWED_USERS=<captured user id>
+   TELEGRAM_HOME_CHANNEL=<captured chat id>
+   ```
+
+11. Если валидная Codex OAuth-сессия ещё не существует, запустить напрямую:
 
    ```bash
    hermes auth add openai-codex
    ```
 
    Hermes показывает URL и одноразовый OpenAI-код и ждёт авторизацию. Никакой выбор provider/model не показывается.
-6. Сохранить конфигурацию:
+12. Сохранить конфигурацию:
 
    ```yaml
    model:
@@ -67,20 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/m
        enabled: true
    ```
 
-7. Выполнить минимальный реальный Codex smoke test на `gpt-5.6-terra`. Если модель недоступна конкретной подписке, завершить установку с точной ошибкой, не подменяя её другой моделью молча.
-8. Запросить Telegram Bot Token скрытым вводом из `/dev/tty`.
-9. Проверить формат токена и вызвать Telegram Bot API `getMe`. Не печатать токен ни в stdout, ни в логи.
-10. Проверить `getWebhookInfo`. Если у бота уже настроен webhook, остановиться с объяснением вместо его удаления.
-11. Сгенерировать криптографически случайную claim-фразу и показать ссылку на созданного бота. Пользователь отправляет точную фразу боту.
-12. До запуска gateway опрашивать Telegram `getUpdates`, принимать только точное совпадение с claim-фразой и извлекать `from.id`/`chat.id`. Устаревшие сообщения не считаются подтверждением.
-13. Сохранить через безопасную атомарную запись с правами `0600`:
-
-   ```text
-   TELEGRAM_BOT_TOKEN=[REDACTED]
-   TELEGRAM_ALLOWED_USERS=<captured user id>
-   TELEGRAM_HOME_CHANNEL=<captured chat id>
-   ```
-
+13. Выполнить минимальный реальный Codex smoke test на `gpt-5.6-terra`. Если модель недоступна конкретной подписке, завершить установку с точной ошибкой, не подменяя её другой моделью молча.
 14. Установить и запустить systemd system service:
 
    ```bash

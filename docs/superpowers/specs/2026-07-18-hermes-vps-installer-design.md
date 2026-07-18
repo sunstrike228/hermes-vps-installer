@@ -30,19 +30,13 @@
 
 ## Пользовательский интерфейс
 
-Команда в гайде должна быть одной строкой. Основной безопасный вариант скачивает скрипт во временный файл, а затем запускает его:
+Команда в гайде должна быть одной строкой и использовать зафиксированный release-тег:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/main/install.sh -o /tmp/hermes-vps-install.sh && sudo bash /tmp/hermes-vps-install.sh
+curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh | bash
 ```
 
-Допустимый короткий вариант для уже открытой root-сессии:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/main/install.sh | bash
-```
-
-Все интерактивные чтения выполняются из `/dev/tty`, поэтому короткий pipe-вариант не ломает ввод.
+Для сессии не под root используется `sudo bash` на правой стороне pipe. Все интерактивные чтения выполняются из `/dev/tty`, поэтому pipe не ломает ввод.
 
 ## Последовательность установки
 

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 INSTALLER_VERSION="v1.0.0"
 HERMES_UPSTREAM_COMMIT="e4ea0a0ed7fc24761b2b425146893561a73216e1"
-OFFICIAL_INSTALLER_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_UPSTREAM_COMMIT}/install.sh"
+OFFICIAL_INSTALLER_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_UPSTREAM_COMMIT}/scripts/install.sh"
 ASSET_BASE_URL="https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/${INSTALLER_VERSION}"
 HERMES_HOME="${HERMES_HOME:-/root/.hermes}"
 export HERMES_HOME
@@ -17,6 +17,7 @@ TELEGRAM_OWNER_ID=""
 TELEGRAM_CHAT_ID=""
 BOT_USERNAME=""
 HELPER_PATH=""
+RESTORE_EXISTING_GATEWAY="0"
 
 print_stage() {
   CURRENT_STAGE="$1"
@@ -38,6 +39,10 @@ fatal() {
 
 cleanup() {
   TELEGRAM_TOKEN=""
+  if [[ "$RESTORE_EXISTING_GATEWAY" == "1" ]]; then
+    systemctl start hermes-gateway.service >/dev/null 2>&1 || \
+      warn "Could not restore the previously running Hermes gateway."
+  fi
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
     rm -rf -- "$TMP_DIR"
   fi
@@ -89,16 +94,17 @@ ensure_dependencies() {
   fi
   local missing=()
   local command_name
-  for command_name in curl git python3; do
+  for command_name in curl git python3 xz; do
     command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
   done
   if (( ${#missing[@]} > 0 )); then
     apt-get update -y
-    DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates git python3
+    DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates git python3 xz-utils
   fi
   command -v curl >/dev/null 2>&1 || fatal "curl is unavailable"
   command -v git >/dev/null 2>&1 || fatal "git is unavailable"
   command -v python3 >/dev/null 2>&1 || fatal "python3 is unavailable"
+  command -v xz >/dev/null 2>&1 || fatal "xz is unavailable"
 }
 
 download_file() {
@@ -117,7 +123,7 @@ prepare_temp_files() {
 install_hermes() {
   print_stage "Install Hermes Agent"
   local official_installer="${TMP_DIR}/hermes-official-install.sh"
-  if [[ -n "${HERMES_INSTALLER_OFFICIAL_PATH:-}" ]]; then
+  if [[ "$TEST_MODE" == "1" && -n "${HERMES_INSTALLER_OFFICIAL_PATH:-}" ]]; then
     cp -- "$HERMES_INSTALLER_OFFICIAL_PATH" "$official_installer"
   else
     download_file "$OFFICIAL_INSTALLER_URL" "$official_installer"
@@ -135,7 +141,7 @@ install_hermes() {
 prepare_helper() {
   print_stage "Telegram setup helper"
   HELPER_PATH="${TMP_DIR}/telegram_claim.py"
-  if [[ -n "${HERMES_INSTALLER_HELPER_PATH:-}" ]]; then
+  if [[ "$TEST_MODE" == "1" && -n "${HERMES_INSTALLER_HELPER_PATH:-}" ]]; then
     cp -- "$HERMES_INSTALLER_HELPER_PATH" "$HELPER_PATH"
   else
     download_file "${ASSET_BASE_URL}/lib/telegram_claim.py" "$HELPER_PATH"
@@ -153,6 +159,18 @@ prompt_telegram_token() {
     printf '\n' >/dev/tty
   fi
   [[ -n "$TELEGRAM_TOKEN" ]] || fatal "Telegram token was not provided"
+}
+
+pause_existing_gateway() {
+  if [[ "$TEST_MODE" == "1" ]]; then
+    return
+  fi
+  if systemctl is-active --quiet hermes-gateway.service; then
+    print_stage "Pause existing Telegram gateway"
+    RESTORE_EXISTING_GATEWAY="1"
+    systemctl stop hermes-gateway.service
+    info "Existing gateway paused so it cannot consume the one-time owner claim."
+  fi
 }
 
 json_field() {
@@ -248,6 +266,7 @@ install_gateway() {
   systemctl is-enabled --quiet hermes-gateway.service
   systemctl is-active --quiet hermes-gateway.service
   hermes gateway status --system --deep
+  RESTORE_EXISTING_GATEWAY="0"
 }
 
 notify_owner() {
@@ -288,6 +307,7 @@ main() {
   install_hermes
   prepare_helper
   prompt_telegram_token
+  pause_existing_gateway
   configure_telegram "$HELPER_PATH"
   authorize_codex
   configure_model

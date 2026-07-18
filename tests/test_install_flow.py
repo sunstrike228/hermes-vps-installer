@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-TOKEN = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi_12345"
+TOKEN = "1234567890:" + ("A" * 35)
 
 
 def write_executable(path: Path, content: str) -> None:
@@ -121,7 +121,8 @@ class InstallerFlowTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", str(REPO / "install.sh")],
+                ["bash"],
+                input=(REPO / "install.sh").read_text(encoding="utf-8"),
                 cwd=REPO,
                 env=env,
                 text=True,

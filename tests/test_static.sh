@@ -13,6 +13,9 @@ fail() {
 bash -n install.sh
 
 grep -Fq 'set -Eeuo pipefail' install.sh || fail "strict Bash mode is missing"
+# Verify the literal runtime expansion in install.sh.
+# shellcheck disable=SC2016
+grep -Fq 'https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_UPSTREAM_COMMIT}/scripts/install.sh' install.sh || fail "pinned official installer path is incorrect"
 grep -Fq 'e4ea0a0ed7fc24761b2b425146893561a73216e1' install.sh || fail "Hermes commit is not pinned"
 grep -Fq 'v1.0.0' install.sh || fail "installer asset tag is not pinned"
 grep -Fq 'read -r -s' install.sh || fail "Telegram token is not read silently"
@@ -23,6 +26,9 @@ grep -Fq 'agent.reasoning_effort_auto.enabled true' install.sh || fail "auto-eff
 grep -Fq 'gateway install --system --run-as-user root --force --start-now --start-on-login' install.sh || fail "root system gateway install is missing"
 grep -Fq 'systemctl is-active --quiet hermes-gateway.service' install.sh || fail "active service verification is missing"
 grep -Fq 'HERMES_INSTALLER_TEST_MODE' install.sh || fail "isolated test mode is missing"
+grep -Fq 'xz-utils' install.sh || fail "xz-utils clean-Ubuntu dependency is missing"
+grep -Fq 'systemctl stop hermes-gateway.service' install.sh || fail "rerun gateway pause is missing"
+grep -Fq 'systemctl start hermes-gateway.service' install.sh || fail "rerun gateway recovery is missing"
 
 if grep -Eq 'GATEWAY_ALLOW_ALL_USERS|TELEGRAM_ALLOW_ALL_USERS|--yolo|approvals\.mode[[:space:]]+off' install.sh; then
   fail "unsafe access/approval bypass is present"
@@ -35,7 +41,8 @@ fi
 [[ -f LICENSE ]] || fail "LICENSE is missing"
 [[ -f .github/workflows/ci.yml ]] || fail "GitHub Actions CI is missing"
 grep -Fq 'v1.0.0/install.sh' README.md || fail "README does not use the stable tagged installer"
-grep -Fq 'sudo bash /tmp/hermes-vps-install.sh' README.md || fail "README one-line sudo command is missing"
+grep -Fq 'v1.0.0/install.sh | bash' README.md || fail "README root one-line command is missing"
+grep -Fq 'v1.0.0/install.sh | sudo bash' README.md || fail "README sudo one-line command is missing"
 grep -Fq '@BotFather' README.md || fail "BotFather instructions are missing"
 grep -Fq 'gpt-5.6-terra' README.md || fail "README model is missing"
 grep -Fq 'medium' README.md || fail "README reasoning level is missing"

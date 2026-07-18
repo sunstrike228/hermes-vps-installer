@@ -258,7 +258,10 @@ def upsert_env(path: str | Path, values: Mapping[str, str]) -> None:
 
 def _client_from_env() -> TelegramClient:
     token = validate_token(os.environ.get("TELEGRAM_BOT_TOKEN", ""))
-    return TelegramClient(token, api_base=os.environ.get("TELEGRAM_API_BASE", "https://api.telegram.org"))
+    api_base = "https://api.telegram.org"
+    if os.environ.get("HERMES_INSTALLER_TEST_MODE") == "1":
+        api_base = os.environ.get("TELEGRAM_API_BASE", api_base)
+    return TelegramClient(token, api_base=api_base)
 
 
 def _print_json(value: Any) -> None:

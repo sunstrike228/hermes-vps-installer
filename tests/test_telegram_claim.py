@@ -3,14 +3,19 @@ import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from lib.telegram_claim import (
     TelegramError,
+    _client_from_env,
     claim_owner,
     prepare_bot,
     upsert_env,
     validate_token,
 )
+
+
+VALID_TOKEN = "1234567890:" + ("A" * 35)
 
 
 class FakeClient:
@@ -36,7 +41,7 @@ class FakeClient:
 
 class TokenValidationTests(unittest.TestCase):
     def test_accepts_realistic_bot_token(self):
-        token = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi_12345"
+        token = VALID_TOKEN
         self.assertEqual(validate_token(token), token)
 
     def test_rejects_token_with_shell_or_url_characters(self):
@@ -50,6 +55,35 @@ class TokenValidationTests(unittest.TestCase):
             with self.subTest(token=token):
                 with self.assertRaises(TelegramError):
                     validate_token(token)
+
+
+class ClientEnvironmentTests(unittest.TestCase):
+    def test_production_ignores_custom_api_base_from_environment(self):
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": VALID_TOKEN,
+                "TELEGRAM_API_BASE": "https://attacker.invalid",
+            },
+            clear=True,
+        ):
+            client = _client_from_env()
+
+        self.assertEqual(client._base, "https://api.telegram.org")
+
+    def test_test_mode_allows_local_mock_api_base(self):
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": VALID_TOKEN,
+                "TELEGRAM_API_BASE": "http://127.0.0.1:12345",
+                "HERMES_INSTALLER_TEST_MODE": "1",
+            },
+            clear=True,
+        ):
+            client = _client_from_env()
+
+        self.assertEqual(client._base, "http://127.0.0.1:12345")
 
 
 class PrepareBotTests(unittest.TestCase):
@@ -194,7 +228,7 @@ class EnvUpdateTests(unittest.TestCase):
             upsert_env(
                 path,
                 {
-                    "TELEGRAM_BOT_TOKEN": "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi_12345",
+                    "TELEGRAM_BOT_TOKEN": VALID_TOKEN,
                     "TELEGRAM_ALLOWED_USERS": "103",
                     "TELEGRAM_HOME_CHANNEL": "103",
                 },

@@ -24,19 +24,19 @@
 
 ## Установка одной командой
 
-Скопируйте всю строку в terminal:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh -o /tmp/hermes-vps-install.sh && sudo bash /tmp/hermes-vps-install.sh
-```
-
-Если вы уже вошли на VPS как root, доступен короткий pipe-вариант:
+Если вы вошли на VPS как root, скопируйте всю строку в terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh | bash
 ```
 
-Первый вариант безопаснее: скрипт остаётся в `/tmp/hermes-vps-install.sh`, и перед запуском его можно посмотреть через `less`.
+Если вы работаете не под root, используйте `sudo`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh | sudo bash
+```
+
+Скрипт закреплён за release-тегом `v1.0.0`. Для ручного просмотра сначала скачайте его в файл, проверьте содержимое и только затем запустите.
 
 ## Что увидит пользователь
 
@@ -96,7 +96,7 @@ hermes gateway start --system
 Сначала скачайте release-скрипт, затем выведите план действий:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh -o /tmp/hermes-vps-install.sh && sudo HERMES_INSTALLER_DRY_RUN=1 bash /tmp/hermes-vps-install.sh
+curl -fsSL https://raw.githubusercontent.com/sunstrike228/hermes-vps-installer/v1.0.0/install.sh | HERMES_INSTALLER_DRY_RUN=1 bash
 ```
 
 Dry run не просит токены, не запускает OAuth и не изменяет систему.
